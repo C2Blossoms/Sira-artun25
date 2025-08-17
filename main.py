@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 import psycopg2
 from datetime import datetime
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
@@ -13,6 +14,14 @@ conn = psycopg2.connect(
     host="localhost",
     port="5432"
 )
+
+
+@app.get("/message")
+def get_message():
+    return JSONResponse(content={"message": "Hello from FastAPI!"})
+
+
+
 
 @app.get("/")
 def root():
