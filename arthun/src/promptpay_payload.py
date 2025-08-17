@@ -1,3 +1,6 @@
+# PromptPay Serial Communication
+# Create Payload
+
 import re
 import serial
 from time import sleep
@@ -58,5 +61,4 @@ def send_payload(port: str, phone: str, amount: float | None = None):
     ser.close()
 
 if __name__ == "__main__":
-    # ตัวอย่าง: ปรับพอร์ต/เบอร์ตามจริง
-    send_payload(port="COM6", phone="081-234-5678", amount=None)
+    send_payload(port="COM6", phone="0953176495", amount=None)

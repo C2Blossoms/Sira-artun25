@@ -12,6 +12,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 String lineBuf;
 
+// วาด QR Code จาก promptpay_payload
 void drawQR(const char* text) {
   // ใช้เวอร์ชัน 10 + ECC ต่ำเพื่อให้ payload PromptPay แบบ static ใส่ได้และพอดีกับสูง 64px
   const uint8_t version = 10; // modules = 4*V + 17 => 57
@@ -22,7 +23,7 @@ void drawQR(const char* text) {
   qrcode_initText(&qrcode, qrcodeData, version, ecc, text);
 
   // คำนวณสเกลให้พอดีจอ 64px พร้อม quiet zone เล็กน้อย
-  const int border = 1;                       // ลด quiet zone ให้พอแสดงบนจอเล็ก (สเปคแนะนำ 4)
+  const int border = 4;                       // ลด quiet zone ให้พอแสดงบนจอเล็ก (สเปคแนะนำ 4)
   const int modules = qrcode.size + border*2; // รวม quiet zone
   int scale = SCREEN_HEIGHT / modules;
   if (scale < 1) scale = 1;
@@ -61,8 +62,6 @@ void setup() {
   display.println("PromptPay payload...");
   display.display();
 
-  // ทดสอบด้วย payload ฮาร์ดโค้ดก็ได้ (คอมเมนต์บรรทัดนี้เมื่อใช้ Serial จริง)
-  // drawQR("00020101021129370016A0000006770101110113006689123456753037645802TH6304D37F");
 }
 
 void loop() {
