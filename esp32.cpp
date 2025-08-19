@@ -4,12 +4,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-const char* ssid = "jib1234";
-const char* password = "54321jib";
+const char* ssid = "Sha";
+const char58* password = "22222222";
 
 String serverName = "http://192.168.0.130:8000/balance/1";
 
-Adafruit_SSD1306 display(128, 64, &Wire, -1);
+ display(128, 64, &Wire, -1);
 
 void setup() {
   Serial.begin(115200);
