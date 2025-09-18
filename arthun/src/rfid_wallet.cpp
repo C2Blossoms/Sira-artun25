@@ -1,6 +1,6 @@
 #include "rfid_wallet.h"
 #include "Config.h"
-
+#include <limits.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Preferences.h>
@@ -10,7 +10,10 @@ static MFRC522     rfid(RCC522_SS, RCC522_RST);
 static Preferences prefs;
 
 void RfidWallet::begin() {
-  SPI.begin(RCC522_SCK, RCC522_MISO, RCC522_MOSI, RCC522_SS);   // ใช้พินตาม Config
+  pinMode(RCC522_SS, OUTPUT);          // <— เพิ่ม
+  digitalWrite(RCC522_SS, HIGH);       // <— เพิ่ม (กันชิปจับบัสตอนบูต)
+
+  SPI.begin(RCC522_SCK, RCC522_MISO, RCC522_MOSI, RCC522_SS);
   rfid.PCD_Init();
 }
 

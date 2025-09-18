@@ -22,7 +22,11 @@ bool KeypadInput::poll(){ char k=getKey_(); if(!k) return false; handleKey_(k); 
 long KeypadInput::amountTHB() const { return buf_.length()? buf_.toInt():0; }
 bool KeypadInput::consumeConfirm(){ bool w=confirmed_; confirmed_=false; return w; }
 void KeypadInput::handleKey_(char k){
-  if(k>='0'&&k<='9'){ if(buf_.length()<7) buf_ += k; return; }
+  if (k >= '0' && k <= '9') {
+    if (buf_ == "0") buf_ = "";          // ตัด 0 นำหน้า
+    if (buf_.length() < 7) buf_ += k;    // จำกัดความยาว
+    return;
+  }
   switch(k){
     case 'A': setMode(TOPUP); break;
     case 'B': setMode(PAY);   break;
