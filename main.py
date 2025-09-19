@@ -9,8 +9,8 @@ import os
 # ------------------------------
 # Config (ใช้ ENV จริงใน production)
 # ------------------------------
-STRIPE_SECRET_KEY = "sk_test_XXXXXXXXXXXXXXXX"
-STRIPE_WEBHOOK_SECRET = "whsec_XXXXXXXXXXXXXXXX"
+STRIPE_SECRET_KEY =  "sk_test_51S92JYGlCMj69RdDNOSqU0udgPIAjEI8fWu6OUsCMoTENbUR4LLMLxB6VyKLdH2V9mY0Vu9aeG4Fc6UjI1Hx2Bvo00GhsPQUCK"
+STRIPE_WEBHOOK_SECRET = "whsec_dc955ab2ff085eed14ad543279c327c14e60932dd361f57a311e3c887769223b"
 
 stripe.api_key = STRIPE_SECRET_KEY
 
