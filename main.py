@@ -4,7 +4,6 @@ from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2 import pool
 import stripe
-import os
 
 # ------------------------------
 # Config (ใช้ ENV จริงใน production)
@@ -32,7 +31,7 @@ app = FastAPI()
 # Models
 # ------------------------------
 class BalanceResponse(BaseModel):
-    card_id: str   # ✅ เดิม int → str
+    card_id: str
     balance: float
 
 class HistoryItem(BaseModel):
@@ -41,11 +40,12 @@ class HistoryItem(BaseModel):
     time: str
 
 class HistoryResponse(BaseModel):
-    card_id: str   # ✅ เดิม int → str
+    card_id: str
     history: list[HistoryItem]
 
 class PaymentRequest(BaseModel):
-    amount: int   # เช่น 5000 = $50.00
+    amount: int      # เช่น 5000 = $50.00 (หน่วยเป็น cent)
+    card_id: str     # card_id ของผู้ใช้ที่จะเติมเงิน
 
 # ------------------------------
 # Utils
@@ -60,11 +60,6 @@ def release_conn(conn):
     if conn:
         db_pool.putconn(conn)
 
-class PaymentRequest(BaseModel):
-    amount: int      # เช่น 5000 = $50.00 (หน่วยเป็น cent)
-    card_id: str     # card_id ของผู้ใช้ที่ต้องการเติม
-
-
 # ------------------------------
 # Routes
 # ------------------------------
@@ -78,7 +73,7 @@ def get_message():
 
 # ✅ Check balance
 @app.get("/balance/{card_id}", response_model=BalanceResponse)
-def get_balance(card_id: str):   # ✅ int → str
+def get_balance(card_id: str):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -90,9 +85,9 @@ def get_balance(card_id: str):   # ✅ int → str
     finally:
         release_conn(conn)
 
-# ✅ Top up
+# ✅ Top up (manual)
 @app.post("/topup/{card_id}/{amount}", response_model=BalanceResponse)
-def topup(card_id: str, amount: float):   # ✅ card_id เป็น str
+def topup(card_id: str, amount: float):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -120,7 +115,7 @@ def topup(card_id: str, amount: float):   # ✅ card_id เป็น str
 
 # ✅ Pay
 @app.post("/pay/{card_id}/{amount}/{vendor_id}", response_model=BalanceResponse)
-def pay(card_id: str, amount: float, vendor_id: int):  # ✅ card_id เป็น str
+def pay(card_id: str, amount: float, vendor_id: int):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -155,7 +150,7 @@ def pay(card_id: str, amount: float, vendor_id: int):  # ✅ card_id เป็�
 
 # ✅ History
 @app.get("/history/{card_id}", response_model=HistoryResponse)
-def get_history(card_id: str):   # ✅ int → str
+def get_history(card_id: str):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -193,7 +188,6 @@ def create_payment(req: PaymentRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ✅ Stripe Webhook
 @app.post("/webhook")
 async def stripe_webhook(request: Request):
@@ -207,10 +201,9 @@ async def stripe_webhook(request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
 
-    # ✅ ตรวจว่า payment สำเร็จ
     if event["type"] == "payment_intent.succeeded":
         payment_intent = event["data"]["object"]
-        amount = payment_intent["amount"] / 100   # Stripe ส่งเป็น cent → แปลงเป็นดอลลาร์
+        amount = payment_intent["amount"] / 100   # cent → ดอลลาร์
         card_id = payment_intent["metadata"].get("card_id")
 
         if not card_id:
@@ -235,10 +228,9 @@ async def stripe_webhook(request: Request):
                     "INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose) VALUES (%s, %s, %s, %s)",
                     (card_id, None, amount, "topup")
                 )
-
                 conn.commit()
-                print(f"✅ Topup {amount} to {card_id} success. New balance: {new_balance[0]}")
 
+                print(f"✅ Topup {amount} to {card_id} success. New balance: {new_balance[0]}")
         finally:
             release_conn(conn)
 
