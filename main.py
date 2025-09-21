@@ -4,6 +4,11 @@ from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2 import pool
 import stripe
+import qrcode
+import base64
+from io import BytesIO
+from PIL import Image
+import numpy as np
 
 # ------------------------------
 # Config (ใช้ ENV จริงใน production)
@@ -186,10 +191,112 @@ def create_payment(req: PaymentRequest):
                 "card_id": req.card_id
             }
         )
-        return {"clientSecret": intent.client_secret}
+        # สร้าง URL ไป Stripe Payment Page (ตัวอย่างแบบ PaymentIntent)
+        # payment_url = f"https://checkout.stripe.com/pay/{intent.client_secret}"
+
+        # # สร้าง QR code
+        # qr = qrcode.make(payment_url)
+        # buf = BytesIO()
+        # qr.save(buf, format="PNG")
+        # qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        # return JSONResponse(content={
+        #     "payment_url": payment_url,
+        #     "qr_code_base64": qr_b64
+        # })
+        # return {"clientSecret": intent.client_secret}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/create-payment-qr")
+def create_payment_qr(req: PaymentRequest):
+    try:
+        # ✅ สร้าง Checkout Session แทน PaymentIntent ตรง ๆ
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": f"Topup for Card {req.card_id}",
+                    },
+                    "unit_amount": req.amount,  # หน่วยเป็น cent
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url="https://example.com/success",   # TODO: เปลี่ยนตามจริง
+            cancel_url="https://example.com/cancel",     # TODO: เปลี่ยนตามจริง
+            metadata={   # ✅ เก็บ card_id
+                "card_id": req.card_id
+            }
+        )
+
+        payment_url = session.url
+
+        # ✅ สร้าง QR Code ของ URL
+        qr = qrcode.make(payment_url)
+        buf = BytesIO()
+        qr.save(buf, format="PNG")
+        qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        return JSONResponse(content={
+            "payment_url": payment_url,
+            "qr_code_base64": qr_b64
+        })
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/create-payment-qr-matrix")
+def create_payment_qr_matrix(req: PaymentRequest):
+    try:
+        # 1) สร้าง Stripe checkout session
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": f"Topup for {req.card_id}"},
+                    "unit_amount": req.amount,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url="https://example.com/success",
+            cancel_url="https://example.com/cancel",
+            metadata={"card_id": req.card_id}
+        )
+
+        # 2) สร้าง QR Code จาก payment_url
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=1,
+            border=0,
+        )
+        qr.add_data(session.url)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white").convert("L")
+
+        # 3) Resize เป็น 64x64
+        img = img.resize((64, 64), Image.NEAREST)
+
+        # 4) แปลงเป็น 0/1 matrix
+        matrix = np.array(img)
+        matrix_01 = (matrix < 128).astype(int).tolist()
+
+        # 5) ส่งออกเป็น string array เช่น ["101010...", "111000..."]
+        matrix_strings = ["".join(str(cell) for cell in row) for row in matrix_01]
+
+        return JSONResponse(content={
+            "payment_url": session.url,
+            "matrix": matrix_strings
+        })
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
 # ✅ Stripe Webhook
 @app.post("/webhook")
 async def stripe_webhook(request: Request):
