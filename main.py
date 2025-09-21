@@ -13,7 +13,6 @@ STRIPE_WEBHOOK_SECRET = "whsec_8ef26a5a06dc32b4468d2c00d9cf265e1a36401182350ccb7
 
 # STRIPE_WEBHOOK_SECRET = "whsec_jiJi7URUxjIbj3KIc765AtbQTuALqCc3"
 
-
 stripe.api_key = STRIPE_SECRET_KEY
 
 # ------------------------------
@@ -204,9 +203,10 @@ async def stripe_webhook(request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
 
+    # ✅ Payment Success
     if event["type"] == "payment_intent.succeeded":
         payment_intent = event["data"]["object"]
-        amount = payment_intent["amount"] / 100   # cent → ดอลลาร์
+        amount = payment_intent["amount"] / 100
         card_id = payment_intent["metadata"].get("card_id")
 
         if not card_id:
@@ -215,7 +215,6 @@ async def stripe_webhook(request: Request):
         conn = get_conn()
         try:
             with conn.cursor() as cur:
-                # update balance
                 cur.execute(
                     "UPDATE cards SET balance = balance + %s WHERE card_id = %s RETURNING balance",
                     (amount, card_id)
@@ -232,9 +231,30 @@ async def stripe_webhook(request: Request):
                     (card_id, None, amount, "topup")
                 )
                 conn.commit()
-
                 print(f"✅ Topup {amount} to {card_id} success. New balance: {new_balance[0]}")
         finally:
             release_conn(conn)
+
+    # Payment Failed
+    elif event["type"] == "payment_intent.payment_failed":
+        payment_intent = event["data"]["object"]
+        card_id = payment_intent["metadata"].get("card_id")
+        error_message = payment_intent["last_payment_error"]["message"]
+
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose, error_message)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (card_id, None, 0, "topup_failed", error_message)
+                )
+                conn.commit()
+                print(f"❌ Topup failed for {card_id}: {error_message}")
+        finally:
+            release_conn(conn)
+
 
     return {"received": True}
