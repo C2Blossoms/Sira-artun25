@@ -1,45 +1,63 @@
 // main.cpp
 #include <Arduino.h>
+#include <Wire.h>
 #include "Config.h"
+#include "rfid_wallet.h"
 #include "ui_lcd.h"
 #include "keypad_input.h"
 
-KeypadInput keypadIn;
+KeypadInput keypad;
+RFIDWallet rfid;
+
+static bool waitForCard(String &uid, uint32_t timeoutMs = 10000) {
+  uint32_t t0 = millis();
+  while (millis() - t0 < timeoutMs) {
+    if (rfid.pollCard(uid)) { rfid.halt(); return true; }
+    delay(20);
+  }
+  return false;
+}
+
+static void showBahtOnLCD(const char* label, int32_t baht) {
+  char line[24];
+  snprintf(line, sizeof(line), "%ld บาท", (long)baht);
+  ui::showValueLabel(label);
+  ui::showValue(line);
+}
 
 void setup() {
   Serial.begin(Cfg::SERIAL_BAUD);
+ 
+  Wire.begin(Cfg::I2C_SDA, Cfg::I2C_SCL);
+  Wire.setClock(Cfg::I2C_HZ);
+
   while (!Serial) {
     delay(10);
   }
   Serial.println("[BOOT] Sira-arthun booting...");
 
-  // เริ่มจอ LCD ก่อน (มีข้อความบูต)
+  // IoT begin
+  rfid.begin();
+  keypad.begin();
   ui::begin();
-
-  keypadIn.begin();
   
   // ตั้งโหมดที่ต้องการเริ่ม (เปลี่ยนได้ตามงานจริง)
-  keypadIn.setMode(KeypadInput::IDLE);
+  // keypad.setMode(KeypadInput::MENU);
 
   Serial.println("[READY] Mode=IDLE. Press keys...");
 }
 
 void loop() {
-  // อ่านคีย์ทุกลูป
-  if (keypadIn.poll()) {
-    if (keypadIn.submitted()) {
-      // ไปขั้นถัดไปของ TOPUP ได้ตรงนี้ (เช่น ส่งค่าไปประมวลผล)
-      // double amount = atof(keypadIn.buffer());
-      // doTopup(amount);
-      keypadIn.consumeSubmitted();
-      keypadIn.clear(); // พร้อมรับค่าใหม่
+  if (keypad.poll()) {
+    if (keypad.submitted()) {
+      double amt = keypad.amount();
+      if (!isnan(amt)) {
+        Serial.print("[AMOUNT] ");
+        Serial.println(amt, 2);
+        // TODO: ดำเนินการ TOPUP/PAY ต่อ
+      }
+      keypad.consumeSubmitted();
     }
-
-    // ปุ่มลัดเปลี่ยนโหมด (เลือกปุ่มที่ใช้งานได้ตอนนี้)
-    char k = keypadIn.lastKey();
-    if      (k == '1') keypadIn.setMode(KeypadInput::IDLE);
-    else if (k == '2') keypadIn.setMode(KeypadInput::TOPUP);
-    else if (k == '4') keypadIn.setMode(KeypadInput::PAY);
-    else if (k == '5') keypadIn.setMode(KeypadInput::CHECK);
   }
+  
 }

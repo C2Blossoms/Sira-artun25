@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <MFRC522.h>
 
-class RfidWallet {
+class RFIDWallet {
 public:
   void begin();                       // เริ่ม SPI+RC522
   bool pollCard(String& uidHex);      // true ถ้ามีบัตรใหม่ (คืน UID เป็น HEX)
