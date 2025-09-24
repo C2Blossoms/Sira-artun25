@@ -3,13 +3,13 @@ from pydantic import BaseModel, field_validator
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2 import pool
-import omise
+# import omise
 
 # ------------------------------
 # Config (ใช้ ENV จริงใน production)
 # ------------------------------
 OMISE_SECRET_KEY = "skey_test_xxx"  # เอามาจาก Omise Dashboard
-omise.api_secret = OMISE_SECRET_KEY
+# omise.api_secret = OMISE_SECRET_KEY
 
 # ------------------------------
 # Database Connection Pool
@@ -167,22 +167,22 @@ def get_history(card_id: str):
         release_conn(conn)
 
 # ✅ Create PromptPay QR (Omise)
-@app.post("/create-promptpay-qr")
-def create_promptpay_qr(req: PaymentRequest):
-    try:
-        charge = omise.Charge.create(
-            amount=req.amount,   # หน่วยสตางค์
-            currency="thb",
-            source={"type": "promptpay"},
-            metadata={"card_id": req.card_id}
-        )
-        return {
-            "charge_id": charge.id,
-            "amount": charge.amount,
-            "qr_url": charge.source.scannable_code.image.download_uri
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/create-promptpay-qr")
+# def create_promptpay_qr(req: PaymentRequest):
+#     try:
+#         charge = omise.Charge.create(
+#             amount=req.amount,   # หน่วยสตางค์
+#             currency="thb",
+#             source={"type": "promptpay"},
+#             metadata={"card_id": req.card_id}
+#         )
+#         return {
+#             "charge_id": charge.id,
+#             "amount": charge.amount,
+#             "qr_url": charge.source.scannable_code.image.download_uri
+#         }
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 # ✅ Webhook จาก Omise
 @app.post("/webhook")
