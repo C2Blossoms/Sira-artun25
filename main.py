@@ -1,24 +1,15 @@
 from fastapi import FastAPI, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from fastapi.responses import JSONResponse
 import psycopg2
 from psycopg2 import pool
-import stripe
-import qrcode
-import base64
-from io import BytesIO
-from PIL import Image
-import numpy as np
+import omise
 
 # ------------------------------
 # Config (ใช้ ENV จริงใน production)
 # ------------------------------
-STRIPE_SECRET_KEY = "sk_test_51S9lC5BHtEk7Kds9OlNl9wWo6Y0Hz3xpLSlVgaZezxZgdlpU2UeZgN49occ8Hde9pK5SZpNwUAPUXEmFz90HRMI200tSJWVTHy"
-STRIPE_WEBHOOK_SECRET = "whsec_8ef26a5a06dc32b4468d2c00d9cf265e1a36401182350ccb7f480784ce54229b"
-
-# STRIPE_WEBHOOK_SECRET = "whsec_jiJi7URUxjIbj3KIc765AtbQTuALqCc3"
-
-stripe.api_key = STRIPE_SECRET_KEY
+OMISE_SECRET_KEY = "skey_test_xxx"  # เอามาจาก Omise Dashboard
+omise.api_secret = OMISE_SECRET_KEY
 
 # ------------------------------
 # Database Connection Pool
@@ -51,8 +42,15 @@ class HistoryResponse(BaseModel):
     history: list[HistoryItem]
 
 class PaymentRequest(BaseModel):
-    amount: int      # เช่น 5000 = $50.00 (หน่วยเป็น cent)
-    card_id: str     # card_id ของผู้ใช้ที่จะเติมเงิน
+    amount: int      # สตางค์ เช่น 10000 = 100 บาท
+    card_id: str
+
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v: int):
+        if v <= 0:
+            raise ValueError("amount must be positive (satang).")
+        return v
 
 # ------------------------------
 # Utils
@@ -72,13 +70,8 @@ def release_conn(conn):
 # ------------------------------
 @app.get("/")
 def root():
-    return {"message": "API server is running 🚀"}
+    return {"message": "API server is running 🚀 (Omise PromptPay)"}
 
-@app.get("/message")
-def get_message():
-    return JSONResponse(content={"message": "Hello from FastAPI!"})
-
-# ✅ Check balance
 @app.get("/balance/{card_id}", response_model=BalanceResponse)
 def get_balance(card_id: str):
     conn = get_conn()
@@ -92,9 +85,10 @@ def get_balance(card_id: str):
     finally:
         release_conn(conn)
 
-# ✅ Top up (manual)
 @app.post("/topup/{card_id}/{amount}", response_model=BalanceResponse)
 def topup(card_id: str, amount: float):
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="amount must be positive.")
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -106,8 +100,6 @@ def topup(card_id: str, amount: float):
             if not new_balance:
                 conn.rollback()
                 raise HTTPException(status_code=404, detail="Card not found")
-
-            # log transaction
             cur.execute(
                 "INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose) VALUES (%s, %s, %s, %s)",
                 (card_id, None, amount, "topup")
@@ -120,9 +112,10 @@ def topup(card_id: str, amount: float):
     finally:
         release_conn(conn)
 
-# ✅ Pay
 @app.post("/pay/{card_id}/{amount}/{vendor_id}", response_model=BalanceResponse)
 def pay(card_id: str, amount: float, vendor_id: int):
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="amount must be positive.")
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -130,19 +123,14 @@ def pay(card_id: str, amount: float, vendor_id: int):
             result = cur.fetchone()
             if not result:
                 raise HTTPException(status_code=404, detail="Card not found")
-
             balance = float(result[0])
             if balance < amount:
                 raise HTTPException(status_code=400, detail="Not enough balance")
-
-            # deduct
             cur.execute(
                 "UPDATE cards SET balance = balance - %s WHERE card_id = %s RETURNING balance",
                 (amount, card_id)
             )
             new_balance = cur.fetchone()
-
-            # log transaction
             cur.execute(
                 "INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose) VALUES (%s, %s, %s, %s)",
                 (card_id, vendor_id, amount, "payment")
@@ -155,7 +143,6 @@ def pay(card_id: str, amount: float, vendor_id: int):
     finally:
         release_conn(conn)
 
-# ✅ History
 @app.get("/history/{card_id}", response_model=HistoryResponse)
 def get_history(card_id: str):
     conn = get_conn()
@@ -179,146 +166,31 @@ def get_history(card_id: str):
     finally:
         release_conn(conn)
 
-# ✅ Create Stripe PaymentIntent
-@app.post("/create-payment")
-def create_payment(req: PaymentRequest):
+# ✅ Create PromptPay QR (Omise)
+@app.post("/create-promptpay-qr")
+def create_promptpay_qr(req: PaymentRequest):
     try:
-        intent = stripe.PaymentIntent.create(
-            amount=req.amount,
-            currency="usd",
-            payment_method_types=["card"],
-            metadata={   # ✅ ส่ง card_id ไปกับ Stripe
-                "card_id": req.card_id
-            }
-        )
-        # สร้าง URL ไป Stripe Payment Page (ตัวอย่างแบบ PaymentIntent)
-        # payment_url = f"https://checkout.stripe.com/pay/{intent.client_secret}"
-
-        # # สร้าง QR code
-        # qr = qrcode.make(payment_url)
-        # buf = BytesIO()
-        # qr.save(buf, format="PNG")
-        # qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-
-        # return JSONResponse(content={
-        #     "payment_url": payment_url,
-        #     "qr_code_base64": qr_b64
-        # })
-        # return {"clientSecret": intent.client_secret}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/create-payment-qr")
-def create_payment_qr(req: PaymentRequest):
-    try:
-        # ✅ สร้าง Checkout Session แทน PaymentIntent ตรง ๆ
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {
-                        "name": f"Topup for Card {req.card_id}",
-                    },
-                    "unit_amount": req.amount,  # หน่วยเป็น cent
-                },
-                "quantity": 1,
-            }],
-            mode="payment",
-            success_url="https://example.com/success",   # TODO: เปลี่ยนตามจริง
-            cancel_url="https://example.com/cancel",     # TODO: เปลี่ยนตามจริง
-            metadata={   # ✅ เก็บ card_id
-                "card_id": req.card_id
-            }
-        )
-
-        payment_url = session.url
-
-        # ✅ สร้าง QR Code ของ URL
-        qr = qrcode.make(payment_url)
-        buf = BytesIO()
-        qr.save(buf, format="PNG")
-        qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-
-        return JSONResponse(content={
-            "payment_url": payment_url,
-            "qr_code_base64": qr_b64
-        })
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/create-payment-qr-matrix")
-def create_payment_qr_matrix(req: PaymentRequest):
-    try:
-        # 1) สร้าง Stripe checkout session
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {"name": f"Topup for {req.card_id}"},
-                    "unit_amount": req.amount,
-                },
-                "quantity": 1,
-            }],
-            mode="payment",
-            success_url="https://example.com/success",
-            cancel_url="https://example.com/cancel",
+        charge = omise.Charge.create(
+            amount=req.amount,   # หน่วยสตางค์
+            currency="thb",
+            source={"type": "promptpay"},
             metadata={"card_id": req.card_id}
         )
-
-        # 2) สร้าง QR Code จาก payment_url
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=1,
-            border=0,
-        )
-        qr.add_data(session.url)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white").convert("L")
-
-        # 3) Resize เป็น 64x64
-        img = img.resize((64, 64), Image.NEAREST)
-
-        # 4) แปลงเป็น 0/1 matrix
-        matrix = np.array(img)
-        matrix_01 = (matrix < 128).astype(int).tolist()
-
-        # 5) ส่งออกเป็น string array เช่น ["101010...", "111000..."]
-        matrix_strings = ["".join(str(cell) for cell in row) for row in matrix_01]
-
-        return JSONResponse(content={
-            "payment_url": session.url,
-            "matrix": matrix_strings
-        })
-
+        return {
+            "charge_id": charge.id,
+            "amount": charge.amount,
+            "qr_url": charge.source.scannable_code.image.download_uri
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-# ✅ Stripe Webhook
+
+# ✅ Webhook จาก Omise
 @app.post("/webhook")
-async def stripe_webhook(request: Request):
-    payload = await request.body()
-    sig = request.headers.get("stripe-signature")
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig, STRIPE_WEBHOOK_SECRET
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
-
-    # ✅ Payment Success
-    if event["type"] == "payment_intent.succeeded":
-        payment_intent = event["data"]["object"]
-        amount = payment_intent["amount"] / 100
-        card_id = payment_intent["metadata"].get("card_id")
-
-        if not card_id:
-            raise HTTPException(status_code=400, detail="No card_id in metadata")
-
+async def omise_webhook(request: Request):
+    payload = await request.json()
+    if payload.get("object") == "charge" and payload.get("status") == "successful":
+        card_id = payload["metadata"].get("card_id")
+        amount = payload["amount"] / 100.0  # แปลงกลับเป็นบาท
         conn = get_conn()
         try:
             with conn.cursor() as cur:
@@ -327,41 +199,13 @@ async def stripe_webhook(request: Request):
                     (amount, card_id)
                 )
                 new_balance = cur.fetchone()
-
-                if not new_balance:
-                    conn.rollback()
-                    raise HTTPException(status_code=404, detail="Card not found")
-
-                # log transaction
-                cur.execute(
-                    "INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose) VALUES (%s, %s, %s, %s)",
-                    (card_id, None, amount, "topup")
-                )
-                conn.commit()
-                print(f"✅ Topup {amount} to {card_id} success. New balance: {new_balance[0]}")
+                if new_balance:
+                    cur.execute(
+                        "INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose) VALUES (%s, %s, %s, %s)",
+                        (card_id, None, amount, "topup")
+                    )
+                    conn.commit()
+                    print(f"✅ Topup {amount} THB for {card_id}. New balance = {new_balance[0]}")
         finally:
             release_conn(conn)
-
-    # Payment Failed
-    elif event["type"] == "payment_intent.payment_failed":
-        payment_intent = event["data"]["object"]
-        card_id = payment_intent["metadata"].get("card_id")
-        error_message = payment_intent["last_payment_error"]["message"]
-
-        conn = get_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose, error_message)
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (card_id, None, 0, "topup_failed", error_message)
-                )
-                conn.commit()
-                print(f"❌ Topup failed for {card_id}: {error_message}")
-        finally:
-            release_conn(conn)
-
-
     return {"received": True}
