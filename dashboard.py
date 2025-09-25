@@ -86,3 +86,4 @@ with col1:
 with col2:
     st.subheader("🏪 ร้านค้า")
     st.dataframe(vendors)
+
