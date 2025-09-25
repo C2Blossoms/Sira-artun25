@@ -1,7 +1,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include "qrcode.h"      // from https://github.com/ricmoo/QRCode
+#include "qrcode.h"      // https://github.com/ricmoo/QRCode
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -10,28 +10,26 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-String lineBuf;
-
-// วาด QR Code จาก promptpay_payload
-void drawQR(const char* text) {
-  // ใช้เวอร์ชัน 10 + ECC ต่ำเพื่อให้ payload PromptPay แบบ static ใส่ได้และพอดีกับสูง 64px
-  const uint8_t version = 10; // modules = 4*V + 17 => 57
+// ---------- QR ----------
+static void drawQR(const char* text) {
+  // สำหรับ PromptPay static ด้วยเบอร์มือถือ version=10 + ECC_LOW มักพอ
+  const uint8_t version = 4; // modules = 4*V + 17 => 57
   const uint8_t ecc = ECC_LOW;
 
   QRCode qrcode;
   uint8_t qrcodeData[qrcode_getBufferSize(version)];
   qrcode_initText(&qrcode, qrcodeData, version, ecc, text);
 
-  // คำนวณสเกลให้พอดีจอ 64px พร้อม quiet zone เล็กน้อย
-  const int border = 4;                       // ลด quiet zone ให้พอแสดงบนจอเล็ก (สเปคแนะนำ 4)
-  const int modules = qrcode.size + border*2; // รวม quiet zone
-  int scale = SCREEN_HEIGHT / modules;
+  const int border = 4;                            // quiet-zone ย่อเล็กลงให้พอดีจอ
+  const int modules = qrcode.size + border * 2;    // รวม quiet-zone
+  // int scale = SCREEN_HEIGHT / modules;
+  int scale = 1;
   if (scale < 1) scale = 1;
+
   const int qrPx = modules * scale;
   const int x0 = (SCREEN_WIDTH  - qrPx) / 2;
-  const int y0 = (SCREEN_HEIGHT - qrPx) / 2;
+  const int y0 = (SCREEN_HEIGHT - qrPx + 15) / 2;
 
-  // วาดพื้นหลังสีขาว แล้วจุด QR เป็นสีดำ เพื่อคอนทราสต์สูง
   display.clearDisplay();
   display.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
 
@@ -47,34 +45,72 @@ void drawQR(const char* text) {
   display.display();
 }
 
-void setup() {
-  Serial.begin(115200);
-  Wire.begin();  // SDA=21, SCL=22 (ESP32 default)
+// ---------- Serial line reader (ทนกับข้อมูลยาว/มาเป็นชิ้น ๆ) ----------
+static String rxLine;
+static const size_t RX_MAX = 1024;  // กันบัฟเฟอร์ล้น
 
+static void processLine(const String& line) {
+  String s = line; s.trim();
+  if (!s.length()) return;
+
+  Serial.print("[ESP32] RX len="); Serial.println(s.length());
+
+  if (s == "PING") {
+    Serial.println("PONG");
+    return;
+  }
+
+  if (s.startsWith("PAYLOAD:")) {
+    String payload = s.substring(8);
+    Serial.print("[ESP32] Payload prefix ok, size=");
+    Serial.println(payload.length());
+    drawQR(payload.c_str());
+    Serial.println("OK: QR drawn");
+  } else {
+    Serial.print("IGNORED: ");
+    Serial.println(s);
+  }
+}
+
+void setup() {
+  // เพิ่มขนาด RX buffer (ESP32 Arduino รองรับ)
+  Serial.setRxBufferSize(2048);
+  Serial.begin(115200);
+  Serial.setTimeout(2000);   // เผื่อช้าหน่อยสำหรับ payload ยาว
+
+  Wire.begin();
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
     while (true) { delay(1000); }
   }
+
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE, SSD1306_BLACK);
   display.setCursor(0, 0);
   display.println("Waiting for");
-  display.println("PromptPay payload...");
+  display.println("Promptpay payload...");
   display.display();
 
+  // แจ้งสถานะพร้อมให้ฝั่ง Python รอ string นี้ได้
+  Serial.println("[ESP32] Ready: Waiting for Promptpay payload");
 }
 
 void loop() {
-  while (Serial.available()) {
-    char c = (char)Serial.read();
+  while (Serial.available() > 0) {
+    int c = Serial.read();
+    if (c < 0) break;
+
     if (c == '\n') {
-      if (lineBuf.startsWith("PAYLOAD:")) {
-        String payload = lineBuf.substring(8);
-        drawQR(payload.c_str());
+      processLine(rxLine);
+      rxLine = "";
+    } else if (c != '\r') {
+      if (rxLine.length() < RX_MAX) {
+        rxLine += (char)c;
+      } else {
+        // ล้นแล้วทิ้งบรรทัดนี้ไป
+        rxLine = "";
+        Serial.println("[ESP32] WARN: line overflow -> drop");
       }
-      lineBuf = "";
-    } else {
-      lineBuf += c;
     }
   }
 }
