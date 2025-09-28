@@ -1,10 +1,18 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+// #include <ArduinoJson.h>
 #include "Config.h"
 #include "rfid_wallet.h"
 #include "keypad_input.h"
 #include "ui_lcd.h"
 #include "ui_oled.h"
+
+
+const char* WIFI_SSID = "Tonliw";
+const char* WIFI_PASS = "77777772";
+const char* SERVER    = "http://172.20.10.6:8000";
 
 KeypadInput keypad;
 RFIDWallet  rfid;
@@ -26,6 +34,13 @@ static void showBahtOnLCD(const char* label, int32_t baht) {
 }
 
 void setup() {
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(300);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
+
   Serial.begin(Cfg::SERIAL_BAUD);
   Serial.setRxBufferSize(2048);
   Serial.setTimeout(2000);
