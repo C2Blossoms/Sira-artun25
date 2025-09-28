@@ -2,7 +2,7 @@
 #include "Config.h"
 #include "ui_lcd.h"
 #include <Keypad.h>
-#include <Keypad_I2C.h>
+#include <Keypad_I2C/Keypad_I2C.h>
 #include <cstring>   // strchr
 #include <cstdlib>   // strtod
 

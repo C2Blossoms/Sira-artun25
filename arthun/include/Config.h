@@ -8,7 +8,7 @@ namespace Cfg {
   constexpr uint8_t OLED_RESET = -1;
   
   // I2C setting
-  constexpr uint32_t I2C_HZ  = 400000;
+  constexpr uint32_t I2C_HZ  = 100000;
   constexpr uint8_t I2C_SDA  = 21;
   constexpr uint8_t I2C_SCL  = 22;
   
