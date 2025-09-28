@@ -3,7 +3,7 @@
 
 class KeypadInput {
 public:
-  enum Mode : uint8_t { HOME, TOPUP, CHECK, PAY_WAIT };
+  enum Mode : uint8_t { HOME, TOPUP, CHECK, PAY, PAY_WAIT };
 
   KeypadInput() = default;
 

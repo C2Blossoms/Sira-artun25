@@ -1,6 +1,7 @@
 #include "keypad_input.h"
 #include "Config.h"
-#include "ui_lcd.h"
+// #include "ui_lcd.h"
+#include "ui_serial_stub.h"
 #include <Keypad.h>
 #include <Keypad_I2C/Keypad_I2C.h>
 #include <cstring>   // strchr
@@ -25,13 +26,14 @@ namespace {
       case KeypadInput::HOME:  return "Mode: MENU";
       case KeypadInput::TOPUP: return "Mode: TOPUP";
       case KeypadInput::CHECK: return "Mode: CHECK";
+      case KeypadInput::PAY:   return "Mode: PAY";
     }
     return "Mode: ?"; // กันพลาด
   }
 
   inline void drawPage_(KeypadInput::Mode m, const char* buf) {
     ui::showHeader(modeText(m));
-    if ( m == KeypadInput::TOPUP ) {
+    if ( m == KeypadInput::TOPUP || m == KeypadInput::PAY ) {
       ui::showValueLabel(m == KeypadInput::TOPUP ? "Topup value:" : "Pay value:");
       ui::showValue(buf);
     } else {
@@ -51,7 +53,7 @@ void KeypadInput::begin() {
   len_ = 0;
   buf_[0] = '\0';
   drawPage_(mode_, buf_);
-  if ( mode_ == TOPUP ){
+  if ( mode_ == TOPUP || mode_ == PAY ){
     ui::footer_value();
   } else if (mode_ == PAY_WAIT) {
     ui::footer_paywait();
@@ -65,7 +67,7 @@ void KeypadInput::begin() {
 void KeypadInput::setMode(Mode m) {
   mode_ = m;
   clear(); // จะรีเฟรชหน้าจอด้วยใน clear()
-  if ( m == TOPUP ) {
+  if ( m == TOPUP || m == PAY) {
     ui::footer_value();
   } else if (m == PAY_WAIT) {
     ui::footer_paywait();
@@ -117,10 +119,10 @@ bool KeypadInput::poll() {
   if (!k) return false;
   lastKey_ = k;
 
-  // โหมดสลับ
+  // สลับโหมด
   if (k == 'A') { setMode(TOPUP); return true; }
-  if (k == 'B') { setMode(CHECK);   return true; }
-  // if (k == 'D') { setMode(MENU);  return true; }
+  if (k == 'B') { setMode(CHECK); return true; }
+  if (k == 'D') { setMode(PAY);   return true; }
 
   // คีย์ช่วยเหลือ
   if (k == 'C') { clear(); return true; }      // CLEAR
@@ -132,19 +134,16 @@ bool KeypadInput::poll() {
       Serial.println(F("[SUBMIT] ignored (empty)"));
     } else {
       submitted_ = true;
-      ui::showSubmitted(buf_);
+      ui::showSubmitted(buf_);     // <-- ตอนนี้มีแล้ว
       ui::footer_paywait();
       Serial.print(F("[SUBMIT] value=\"")); Serial.print(buf_); Serial.println(F("\""));
-
-      // นโยบายหลัง submit: ล็อกจนกด C เคลียร์ (ตัวอย่าง)
-      // ถ้าอยากเคลียร์ทันที ให้เรียก clear(); แล้ว return
       drawPage_(mode_, buf_);
     }
     return true;
+  }
 
-  // รับค่า
-  if (mode_ == TOPUP ) {
-    // *** ตัดทศนิยมออก เพราะ layout ไม่มี '.' ***
+  // รับค่า (TOPUP/PAY = ตัวเลขเท่านั้น)
+  if (mode_ == TOPUP || mode_ == PAY) {
     if (k >= '0' && k <= '9') {
       if (len_ < MAXLEN) {
         buf_[len_++] = k; buf_[len_] = '\0';
@@ -156,18 +155,18 @@ bool KeypadInput::poll() {
     } else {
       Serial.print(F("[IGN] non-numeric key '")); Serial.print(k); Serial.println(F("'"));
     }
+    return true;
+  }
+
+  // HOME/CHECK: เก็บข้อความทั่วไป
+  if (len_ < MAXLEN) {
+    buf_[len_++] = k; buf_[len_] = '\0';
+    ui::showBuffer(buf_);
+    ui::showPressed(k);
+    Serial.print(F("[KEYPAD] key='")); Serial.print(k);
+    Serial.print(F("', buffer=\"")); Serial.print(buf_); Serial.println(F("\""));
   } else {
-    // IDLE/CHECK: เก็บเป็นข้อความทั่วไป
-    if (len_ < MAXLEN) {
-      buf_[len_++] = k; buf_[len_] = '\0';
-      ui::showBuffer(buf_);
-      ui::showPressed(k);
-      Serial.print(F("[KEYPAD] key='")); Serial.print(k);
-      Serial.print(F("', buffer=\"")); Serial.print(buf_); Serial.println(F("\""));
-    } else {
-      Serial.println(F("[KEYPAD] buffer full (ignored key)"));
-    }
+    Serial.println(F("[KEYPAD] buffer full (ignored key)"));
   }
   return true;
-  }
 }

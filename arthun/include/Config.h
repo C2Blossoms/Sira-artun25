@@ -1,6 +1,14 @@
 #pragma once
-
+#ifndef Cfg_BUZZER_PIN_DEFINED
+#define BUZZER_PIN 25  // เปลี่ยนเป็นพินที่คุณใช้จริง
+#else
+#define BUZZER_PIN Cfg::BUZZER_PIN
+#endif
 namespace Cfg {
+  static void beepOK()   { tone(BUZZER_PIN, 2000, 80); }   // สั้นๆ = สำเร็จ
+  static void beepErr()  { tone(BUZZER_PIN, 400,  220); }  // ยาว = ผิดพลาด
+  static void beepWait() { tone(BUZZER_PIN, 1200, 60); }   // ติ๊ด = กำลังทำงาน
+
   // OLED
   constexpr uint8_t  OLED_ADDR  = 0x3C;
   constexpr uint8_t OLED_W = 128;
