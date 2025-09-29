@@ -2,6 +2,13 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 
+# ---------------- Load CSS ----------------
+def local_css(file_name):
+    with open(file_name, encoding="utf-8") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+local_css("style.css")
+
 # ---------------- Database Connect ----------------
 conn = psycopg2.connect(
     dbname="postgres",
@@ -23,11 +30,11 @@ FROM transaction_logs;
 """
 summary = pd.read_sql(summary_query, conn).iloc[0]
 
-# 2) ลูกค้า (แก้ชื่อตัวสะกด student_id)
+# 2) ลูกค้า 
 customers_query = """
 SELECT c.card_id, s.full_name, c.balance
 FROM cards c
-JOIN students s ON c.student_id = s.student_id
+JOIN students s ON c.student_id = s.stdent_id
 ORDER BY c.card_id
 LIMIT 10;
 """
@@ -45,21 +52,22 @@ LIMIT 10;
 vendors = pd.read_sql(vendors_query, conn)
 
 # ---------------- Streamlit Layout ----------------
-st.title("📊 School Cashless Dashboard")
+st.title(" RFID PAYMENT SYSTEM Dashboard")
+   
 
 # แถวแรก: Summary
 col1, col2, col3 = st.columns(3)
-col1.metric("💰 เงินที่ถูกเติมเข้าสู่ระบบ", f"{summary['total_topup']:.2f}")
-col2.metric("🛒 เงินที่ลูกค้าใช้จ่าย", f"{summary['total_payment']:.2f}")
-col3.metric("💳 ยอดเงินคงเหลือรวม", f"{summary['balance_left']:.2f}")
+col1.metric(" Balance Top-Up", f"{summary['total_topup']:.2f}")
+col2.metric(" Amount Spent", f"{summary['total_payment']:.2f}")
+col3.metric(" Total Balance", f"{summary['balance_left']:.2f}")
 
 # แถวสอง: กราฟรายบัตร
-st.subheader("📈 กราฟการเติมเงิน/จ่ายเงินตามบัตร")
+st.subheader(" Top-Up and Spending by Card")
 
 # เลือกบัตร
 card_list_query = "SELECT card_id FROM cards ORDER BY card_id;"
 card_list = pd.read_sql(card_list_query, conn)["card_id"].tolist()
-selected_card = st.selectbox("เลือกบัตร", card_list)
+selected_card = st.selectbox("Select Card", card_list)
 
 # Query ข้อมูลบัตรที่เลือก (แก้ให้รองรับ TEXT โดยใช้ %s แทน f-string)
 card_query = """
@@ -81,9 +89,9 @@ else:
 # แถวสาม: ตาราง ลูกค้า + ร้านค้า
 col1, col2 = st.columns(2)
 with col1:
-    st.subheader("👤 ลูกค้า")
+    st.subheader("User")
     st.dataframe(customers)
 with col2:
-    st.subheader("🏪 ร้านค้า")
+    st.subheader("Vendor")
     st.dataframe(vendors)
 

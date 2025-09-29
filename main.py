@@ -13,6 +13,7 @@ from PIL import Image
 # ------------------------------
 # Database Connection Pool
 # ------------------------------
+
 db_pool = pgpool.SimpleConnectionPool(
     1, 10,
     dbname=os.getenv("PGDATABASE", "postgres"),

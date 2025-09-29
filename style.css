@@ -1,0 +1,82 @@
+/* โหลดฟอนต์ Rubik Iso */
+@import url('https://fonts.googleapis.com/css2?family=Rubik+Iso&display=swap');
+
+
+
+/* ทั้งแอป: ใช้ Bitcount Grid Double */
+.stApp {
+    background-color: #f4d35e;  /* สีพื้นหลัง */
+    font-family: 'Rubik Iso', sans-serif !important;
+}
+
+/* Title (st.title → h1) */
+h1 {
+    font-family: 'Rubik Iso', cursive !important;
+    font-weight: 800;
+    font-size: 60px !important;  
+    text-align: center;
+    color: #0d3b66 !important;
+}
+
+
+/* Subheader (st.subheader → h2, h3) */
+h2, h3 {
+    font-family: 'Rubik Iso', cursive !important;
+    font-weight: 700;
+    font-size: 32px !important;
+    color: #0d3b66 !important;
+}
+
+/* Metric Value */
+[data-testid="stMetricValue"] {
+    color: #000000;
+    font-size: 28px !important;
+    font-weight: bold;
+}
+
+/* Metric Label */
+[data-testid="stMetricLabel"] {
+    color: #0d3b66;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* DataFrame Table */
+.stDataFrame {
+    border: 2px solid #ffffff;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+}
+
+
+/* ครอบกรอบ Chart ทุกประเภท */
+[data-testid="stLineChart"],
+[data-testid="stBarChart"],
+[data-testid="stAreaChart"],
+[data-testid="stAltairChart"],
+[data-testid="stPlotlyChart"],
+[data-testid="stVegaLiteChart"],
+[data-testid="stPyplotChart"],
+[data-testid="stGraphVizChart"],
+[data-testid="stDeckGlChart"] {
+    border: 3px solid #2c3e50;
+    border-radius: 12px;
+    background-color: #ffffff;
+    padding: 12px;
+    margin: 20px 0;
+    box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+    overflow: hidden; /* ป้องกันทะลุ */
+}
+
+/* ตัวกราฟด้านใน (บังคับให้ไม่เกินกรอบ) */
+[data-testid="stLineChart"] > div,
+[data-testid="stBarChart"] > div,
+[data-testid="stAreaChart"] > div {
+    max-width: 100% !important;
+    overflow: hidden !important;
+}
+
+
+
+
