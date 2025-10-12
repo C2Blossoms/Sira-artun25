@@ -9,7 +9,13 @@ import base64
 from io import BytesIO
 import numpy as np
 from PIL import Image
+from fastapi.middleware.cors import CORSMiddleware
+import pandas as pd
+from fastapi import FastAPI, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
+templates = Jinja2Templates(directory="templates")
 # ------------------------------
 # Database Connection Pool
 # ------------------------------
@@ -24,6 +30,14 @@ db_pool = pgpool.SimpleConnectionPool(
 )
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # ใส่ "*" ชั่วคราว (ในโปรดักชันแนะนำระบุโดเมน)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ------------------------------
 # Models (ยังใช้สำหรับตรวจสอบ/กำหนด schema response)
@@ -54,12 +68,13 @@ def release_conn(conn):
     if conn:
         db_pool.putconn(conn)
 
+app.mount("/result", StaticFiles(directory="result"), name="result")
 # ------------------------------
 # Basic Routes
 # ------------------------------
 @app.get("/")
 def root():
-    return {"message": "API server is running 🚀"}
+    return {"message": "API server is running ..."}
 
 @app.get("/message")
 def get_message():
@@ -107,11 +122,13 @@ def topup(card_id: str, amount: float):
         release_conn(conn)
 
 # ✅ Pay (หักเงิน, หน่วยบาท)
+# ✅ Pay (หักเงินจากบัตร และเพิ่มให้แม่ค้า)
 @app.post("/pay/{card_id}/{amount}/{vendor_id}", response_model=BalanceResponse)
 def pay(card_id: str, amount: float, vendor_id: int):
     conn = get_conn()
     try:
         with conn.cursor() as cur:
+            # 1️ตรวจสอบบัตร
             cur.execute("SELECT balance FROM cards WHERE card_id = %s", (card_id,))
             result = cur.fetchone()
             if not result:
@@ -121,50 +138,107 @@ def pay(card_id: str, amount: float, vendor_id: int):
             if balance < amount:
                 raise HTTPException(status_code=400, detail="Not enough balance")
 
+            # 2 ตรวจสอบแม่ค้า
+            cur.execute("SELECT vendor_id FROM vendors WHERE vendor_id = %s", (vendor_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Vendor not found")
+
+            #  หักเงินจากบัตรลูกค้า
             cur.execute(
                 "UPDATE cards SET balance = balance - %s WHERE card_id = %s RETURNING balance",
                 (amount, card_id)
             )
-            new_balance = cur.fetchone()
+            new_balance = float(cur.fetchone()[0])
 
+            #  เพิ่มยอดเงินให้แม่ค้า
+            cur.execute(
+                "UPDATE vendors SET balance = balance + %s WHERE vendor_id = %s RETURNING balance",
+                (amount, vendor_id)
+            )
+            vendor_balance = float(cur.fetchone()[0])
+
+            # บันทึกประวัติธุรกรรม
             cur.execute(
                 "INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose) VALUES (%s, %s, %s, %s)",
-                (card_id, vendor_id, amount, "payment")
+                (card_id, vendor_id, amount, 'payment')
             )
+
             conn.commit()
-            return {"card_id": card_id, "balance": float(new_balance[0])}
+
+            return {
+                "card_id": card_id,
+                "balance": new_balance
+            }
+
+
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         release_conn(conn)
 
+
 # ✅ History
-@app.get("/history/{card_id}", response_model=HistoryResponse)
-def get_history(card_id: str):
+@app.get("/history/{card_id}")
+def get_history_daily(card_id: str):
     conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT amount, purpose, txn_time 
-                FROM transaction_logs 
-                WHERE card_id = %s 
-                ORDER BY txn_time DESC
-                """,
-                (card_id,)
-            )
-            rows = cur.fetchall()
-            history = [
-                {"amount": float(r[0]), "purpose": r[1], "time": str(r[2])}
-                for r in rows
-            ]
-            return {"card_id": card_id, "history": history}
+        df = pd.read_sql(
+            "SELECT amount, purpose, txn_time FROM transaction_logs WHERE card_id = %s",
+            conn,
+            params=(card_id,)
+        )
+    finally:
+        conn.close()
+
+    if df.empty:
+        return []
+
+    df['txn_time'] = pd.to_datetime(df['txn_time'])
+    df['day'] = df['txn_time'].dt.strftime("%Y-%m-%d")
+
+    daily_data = []
+    for day, group in df.groupby("day"):
+        topup = group.loc[group.purpose=="topup","amount"].sum()
+        payment = group.loc[group.purpose=="payment","amount"].sum()
+        daily_data.append({"day": day, "total_topup": topup, "total_payment": payment})
+
+    return daily_data
+
+@app.get("/api/history/full")
+def api_history_full():
+    conn = get_conn()
+    try:
+        query = """
+        SELECT 
+            txn_id,
+            card_id,
+            amount,
+            purpose,
+            txn_time
+        FROM transaction_logs
+        ORDER BY txn_time DESC;
+        """
+        df = pd.read_sql(query, conn)
+
+        # ✅ แปลง NaN, inf ให้เป็น None เพื่อให้ JSON ส่งออกได้
+        df = df.replace({np.nan: None})
+        df = df.replace([np.inf, -np.inf], None)
+
+        return df.to_dict(orient="records")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         release_conn(conn)
 
+
+
+
+
+
 # -------------------------------------------------------
-# ✅ สร้าง QR ธรรมดา (สำหรับลิงก์ไปยังหน้า HTML ของเรา)
+# ✅ สร้าง QR ธรรมดา (สำห รับลิงก์ไปยังหน้า HTML ของเรา)
 # -------------------------------------------------------
 # @app.get("/create-qr/{card_id}/{amount}")
 # def create_qr(card_id: str, amount: float):
@@ -174,25 +248,34 @@ def get_history(card_id: str):
 #     qr_img.save(buf, format="PNG")
 #     qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 #     return {"pay_url": pay_url, "qr_base64": qr_b64}
+# -------------------------------------------------------
 @app.get("/create-qr-matrix/{card_id}/{amount}")
 def create_qr_matrix(card_id: str, amount: float):
-    # สร้างลิงก์สำหรับชำระเงินตาม card_id และ amount
+    # ลิงก์สำหรับจ่ายเงิน
     pay_url = f"http://172.20.10.6:8000/pay-page/{card_id}/{amount}"
 
-    # สร้าง QR Code เป็นภาพขาว-ดำ
-    qr = qrcode.make(pay_url).convert("L")       # convert เป็นโมโนโครม
-    qr = qr.resize((64, 64), Image.NEAREST)      # ย่อขนาดเป็น 64x64
+    # ---------- สร้าง QR Code ----------
+    qr = qrcode.QRCode(
+        version=5,  # ขนาด (v3 = 29x29 modules, v4=33x33, v5=37x37)
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=1,
+        border=1
+    )
+    qr.add_data(pay_url)
+    qr.make(fit=True)
 
-    # แปลงภาพเป็นเมทริกซ์ 0/1 (1=ดำ, 0=ขาว)
-    matrix = np.array(qr)
-    matrix_01 = (matrix < 128).astype(int).tolist()
-    matrix_strings = ["".join(str(cell) for cell in row) for row in matrix_01]
+    # ดึง matrix (True=ดำ, False=ขาว)
+    matrix = qr.get_matrix()
 
-    # คืนค่าเป็น JSON
+    # แปลงเป็น 0/1 string
+    matrix_strings = ["".join("1" if cell else "0" for cell in row) for row in matrix]
+
+    # ---------- ส่งกลับ JSON ----------
     return JSONResponse(content={
         "pay_url": pay_url,
-        "matrix": matrix_strings  # เป็น list ยาว 64 บรรทัด
+        "matrix": matrix_strings
     })
+
 
 # ------------------------------
 # ✅ หน้า HTML เมื่อสแกน QR
@@ -228,3 +311,60 @@ def pay_page(card_id: str, amount: float):
     </html>
     """
     return html
+
+
+@app.get("/api/summary")
+def api_summary():
+    conn = get_conn()
+    try:
+        query = """
+        SELECT
+            SUM(CASE WHEN purpose='topup' THEN amount ELSE 0 END) AS total_topup,
+            SUM(CASE WHEN purpose='payment' THEN amount ELSE 0 END) AS total_payment,
+            SUM(CASE WHEN purpose='topup' THEN amount ELSE 0 END) -
+            SUM(CASE WHEN purpose='payment' THEN amount ELSE 0 END) AS balance_left
+        FROM transaction_logs;
+        """
+        df = pd.read_sql(query, conn)
+        return df.iloc[0].to_dict()
+    finally:
+        release_conn(conn)
+
+@app.get("/api/customers")
+def api_customers():
+    conn = get_conn()
+    try:
+        query = """
+        SELECT c.card_id, s.full_name, c.balance
+        FROM cards c
+        JOIN students s ON c.student_id = s.student_id
+        ORDER BY c.card_id
+        LIMIT 10;
+        """
+        df = pd.read_sql(query, conn)
+        return df.to_dict(orient="records")
+    finally:
+        release_conn(conn)
+
+@app.get("/api/vendors")
+def api_vendors():
+    conn = get_conn()
+    try:
+        query = """
+        SELECT v.vendor_id, v.shop_name, COALESCE(SUM(t.amount),0) AS total_spent
+        FROM vendors v
+        LEFT JOIN transaction_logs t ON v.vendor_id = t.vendor_id AND t.purpose='payment'
+        GROUP BY v.vendor_id, v.shop_name
+        ORDER BY total_spent DESC
+        LIMIT 10;
+        """
+        df = pd.read_sql(query, conn)
+        return df.to_dict(orient="records")
+    finally:
+        release_conn(conn)
+
+# ----------------- Dashboard HTML -----------------
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def get_dashboard(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
