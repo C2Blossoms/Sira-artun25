@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ชำระเงิน</title>
+</head>
+<body>
+    <h2>ยอดชำระ: {{ amount }} บาท</h2>
+    <form action="/topup/{{ card_id }}/{{ amount }}?token={{ token }}" method="post">
+        <button type="submit">ยืนยันการชำระเงิน</button>
+    </form>
+
+
+</body>
+</html>
