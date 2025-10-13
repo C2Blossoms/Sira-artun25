@@ -1,14 +1,90 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
-    <title>ชำระเงิน</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ชำระเงิน</title>
+  <link rel="icon" href="https://i.postimg.cc/Xq17pCHf/icons8-credit-card-cash-withdrawal-64.png" type="image/x-icon">
+  <style>
+    body {
+      font-family: 'Prompt', 'Segoe UI', sans-serif;
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .payment-box {
+      background-color: #ffffff;
+      padding: 30px 20px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+      box-sizing: border-box;
+    }
+
+    .icon {
+      width: 64px;
+    }
+
+    h2 {
+      color: #2c3e50;
+      font-size: 22px;
+      margin-bottom: 25px;
+    }
+
+    button {
+      background-color: #1565c0;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      width: 100%;
+      max-width: 300px;
+    }
+
+    button:hover {
+      background-color: #0d47a1;
+    }
+
+    .secure-note {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #607d8b;
+    }
+
+    @media (max-width: 480px) {
+      h2 {
+        font-size: 18px;
+      }
+
+      button {
+        font-size: 15px;
+        padding: 10px 20px;
+      }
+
+      .secure-note {
+        font-size: 13px;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div class="payment-box">
+    <img src="https://i.postimg.cc/T1GSbdNf/icons8-merchant-account-100.png" alt="icon" class="icon">
     <h2>ยอดชำระ: {{ amount }} บาท</h2>
     <form action="/topup/{{ card_id }}/{{ amount }}?token={{ token }}" method="post">
-        <button type="submit">ยืนยันการชำระเงิน</button>
+      <button type="submit">ยืนยันการชำระเงิน</button>
     </form>
-
-
+    <p class="secure-note">ธุรกรรมนี้ปลอดภัยและไม่สามารถย้อนกลับได้</p>
+  </div>
 </body>
 </html>

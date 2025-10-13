@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from datetime import datetime, timedelta
 import uuid
 from fastapi import Query
+from fastapi import Request
 
 tokens = {}
 templates = Jinja2Templates(directory="templates")
@@ -167,13 +168,23 @@ def topup_page(
     token: str = Query(..., description="One-time token for access")
 ):
     if not token or token not in tokens:
-        return HTMLResponse(content="<h2>ลิงก์ไม่ถูกต้อง</h2>", status_code=403)
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "message": "ลิงก์ไม่ถูกต้อง กรุณาตรวจสอบรายการอีกครั้ง"
+        }, status_code=403)
 
     data = tokens[token]
     if data["used"]:
-        return HTMLResponse(content="<h2>ลิงก์นี้ถูกใช้ไปแล้ว</h2>", status_code=403)
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "message": "ลิงก์นี้ถูกใช้ไปแล้ว กรุณาติดต่อเจ้าหน้าที่"
+        }, status_code=403)
+
     if datetime.now() > data["expire_at"]:
-        return HTMLResponse(content="<h2>ลิงก์นี้หมดอายุแล้ว</h2>", status_code=403)
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "message": "ลิงก์นี้หมดอายุแล้ว กรุณาทำรายการใหม่อีกครั้ง"
+        }, status_code=403)
 
     return templates.TemplateResponse("topup.html", {
         "request": request,
@@ -183,15 +194,25 @@ def topup_page(
     })
 
 @app.post("/topup/{card_id}/{amount}", response_model=BalanceResponse)
-def topup(card_id: str, amount: float, token: str):
+def topup(request: Request, card_id: str, amount: float, token: str):
     if not token or token not in tokens:
-        raise HTTPException(status_code=403, detail="Token ไม่ถูกต้อง")
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "message": "ลิงก์ไม่ถูกต้อง กรุณาตรวจสอบรายการอีกครั้ง"
+        }, status_code=403)
 
     data = tokens[token]
     if data["used"]:
-        raise HTTPException(status_code=403, detail="Token นี้ถูกใช้ไปแล้ว")
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "message": "ลิงก์นี้ถูกใช้ไปแล้ว กรุณาติดต่อเจ้าหน้าที่"
+        }, status_code=403)
+
     if datetime.now() > data["expire_at"]:
-        raise HTTPException(status_code=403, detail="Token หมดอายุแล้ว")
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "message": "ลิงก์นี้หมดอายุแล้ว กรุณาทำรายการใหม่อีกครั้ง"
+        }, status_code=403)
 
     conn = get_conn()
     try:
@@ -213,7 +234,12 @@ def topup(card_id: str, amount: float, token: str):
 
             data["used"] = True
 
-            return {"card_id": card_id, "balance": float(new_balance[0])}
+            return templates.TemplateResponse("thx.html", {
+                "request": request,
+                "card_id": card_id,
+                "balance": float(new_balance[0]),
+                "message": "ขอบคุณที่ใช้บริการ"
+            })
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
