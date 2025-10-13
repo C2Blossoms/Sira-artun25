@@ -76,9 +76,7 @@ def release_conn(conn):
         db_pool.putconn(conn)
 
 app.mount("/result", StaticFiles(directory="result"), name="result")
-# ------------------------------
-# Basic Routes
-# ------------------------------
+
 @app.get("/")
 def root():
     return {"message": "API server is running ..."}
@@ -87,7 +85,6 @@ def root():
 def get_message():
     return JSONResponse(content={"message": "Hello from FastAPI!"})
 
-# ✅ Check balance
 @app.get("/balance/{card_id}", response_model=BalanceResponse)
 def get_balance(card_id: str):
     conn = get_conn()
@@ -101,7 +98,6 @@ def get_balance(card_id: str):
     finally:
         release_conn(conn)
 
-# ✅ Top up (manual, หน่วยบาท)
 @app.post("/topup/{card_id}/{amount}", response_model=BalanceResponse)
 def topup(card_id: str, amount: float):
     conn = get_conn()
@@ -128,8 +124,6 @@ def topup(card_id: str, amount: float):
     finally:
         release_conn(conn)
 
-# ✅ Pay (หักเงิน, หน่วยบาท)
-# ✅ Pay (หักเงินจากบัตร และเพิ่มให้แม่ค้า)
 @app.post("/pay/{card_id}/{amount}/{vendor_id}", response_model=BalanceResponse)
 def pay(card_id: str, amount: float, vendor_id: int):
     conn = get_conn()
@@ -262,11 +256,19 @@ def create_qr_matrix(card_id: str, amount: float):
     expire_at = datetime.now() + timedelta(minutes=5)
     tokens[token] = {"used": False, "expire_at": expire_at}
 
+    conn = get_conn()
+    with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO transaction_logs (card_id, vendor_id, amount, purpose, txn_time, token)
+                VALUES (%s, %s, %s, %s, NOW(), %s)
+            """, (card_id, None, amount, "qr_create", token))
+            conn.commit()
+
     pay_url = f"http://147.185.221.31:54264/pay-page/{card_id}/{amount}?token={token}"
 
     # ---------- สร้าง QR Code ----------
     qr = qrcode.QRCode(
-        version=5,  #(v3 = 29x29 modules, v4=33x33, v5=37x37)
+        version=4,  #(v3 = 29x29 modules, v4=33x33, v5=37x37)
         error_correction=qrcode.constants.ERROR_CORRECT_L,
         box_size=1,
         border=1
