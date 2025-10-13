@@ -14,6 +14,13 @@ import pandas as pd
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from datetime import datetime, timedelta
+import uuid
+
+
+tokens = {}
+
+
 
 templates = Jinja2Templates(directory="templates")
 # ------------------------------
@@ -251,12 +258,15 @@ def api_history_full():
 # -------------------------------------------------------
 @app.get("/create-qr-matrix/{card_id}/{amount}")
 def create_qr_matrix(card_id: str, amount: float):
-    # ลิงก์สำหรับจ่ายเงิน
-    pay_url = f"http://172.20.10.6:8000/pay-page/{card_id}/{amount}"
+    token = str(uuid.uuid4())
+    expire_at = datetime.now() + timedelta(minutes=5)
+    tokens[token] = {"used": False, "expire_at": expire_at}
+
+    pay_url = f"http://147.185.221.31:54264/pay-page/{card_id}/{amount}?token={token}"
 
     # ---------- สร้าง QR Code ----------
     qr = qrcode.QRCode(
-        version=5,  # ขนาด (v3 = 29x29 modules, v4=33x33, v5=37x37)
+        version=5,  #(v3 = 29x29 modules, v4=33x33, v5=37x37)
         error_correction=qrcode.constants.ERROR_CORRECT_L,
         box_size=1,
         border=1
@@ -281,7 +291,18 @@ def create_qr_matrix(card_id: str, amount: float):
 # ✅ หน้า HTML เมื่อสแกน QR
 # ------------------------------
 @app.get("/pay-page/{card_id}/{amount}", response_class=HTMLResponse)
-def pay_page(card_id: str, amount: float):
+def pay_page(card_id: str, amount: float, token: str = None):
+    if not token or token not in tokens:
+        return HTMLResponse(content="<h2>ลิงก์ไม่ถูกต้อง</h2>", status_code=403)
+    
+    data = tokens[token]
+    if data["used"]:
+        return HTMLResponse(content="<h2>ลิงก์นี้ถูกใช้ไปแล้ว</h2>", status_code=403)
+    if datetime.now() > data["expire_at"]:
+        return HTMLResponse(content="<h2>ลิงก์นี้หมดอายุแล้ว</h2>", status_code=403)
+    
+    data["used"] = True
+
     html = f"""
     <html>
         <head>
