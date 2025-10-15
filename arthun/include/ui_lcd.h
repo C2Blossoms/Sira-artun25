@@ -22,6 +22,10 @@ namespace ui {
     // BUFFER
     void showBuffer(const char* buf);
 
+    // BALANCE
+    void showCardUID(const String& uid);
+    void showBalance(float baht);
+
     // TOPUP
     void showValueLabel(const char* label);
     void showValue(const char* value);
@@ -33,6 +37,7 @@ namespace ui {
     void footer_menu();   // A=TOPUP B=CHECK D=IDLE
     void footer_value();   // C=CLEAR #=BKSP *=OK D=HOME
     void footer_paywait(); // C=CANCEL TAP CARD... D=HOME
+    void footer_payfail(); // C=CANCEL D=HOME
     void footer_none();
 
 }

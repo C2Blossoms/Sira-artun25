@@ -6,7 +6,7 @@
 #include "ui_oled.h"
 
 namespace {
-  Adafruit_SSD1306 display(Cfg::OLED_W, Cfg::OLED_H, &Wire, Cfg::OLED_RESET);
+  Adafruit_SSD1306 display(Cfg::OLED_W, Cfg::OLED_H, &Wire);
 
   // วาดข้อความสองบรรทัดง่าย ๆ
   void drawTwoLines(const char* l1, const char* l2) {
@@ -21,6 +21,8 @@ namespace {
 }
 
 bool oled::begin() {
+  Wire.begin(Cfg::I2C_SDA, Cfg::I2C_SCL);
+  Wire.setClock(Cfg::I2C_HZ);
   if (!display.begin(SSD1306_SWITCHCAPVCC, Cfg::OLED_ADDR)) {
     return false;
   }
@@ -28,6 +30,7 @@ bool oled::begin() {
   display.display();
   return true;
 }
+
 
 void oled::showBoot(const char* line1, const char* line2) {
   drawTwoLines(line1, line2);
@@ -66,7 +69,7 @@ void oled::drawQR(const char* text) {
 
   const int qrPx = modules * scale;
   const int x0   = (Cfg::OLED_W  - qrPx) / 2;
-  const int y0   = (Cfg::OLED_H  - qrPx) / 2;
+  const int y0   = (Cfg::OLED_H  - qrPx) / 2 + 8;
 
   display.clearDisplay();
   display.fillRect(0, 0, Cfg::OLED_W, Cfg::OLED_H, SSD1306_WHITE);

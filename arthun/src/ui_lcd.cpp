@@ -1,11 +1,12 @@
 #include "ui_lcd.h"
 #include "Config.h"
+#include <math.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
 static LiquidCrystal_I2C lcd(Cfg::LCD_I2C_ADDR, Cfg::LCD_COLS, Cfg::LCD_ROWS);
 
-namespace ui {
+namespace {
   static uint8_t HOME_ICON[8] = {
     B00000, B00100, B01110, B11111, B01010, B01010, B00000, B00000
   };
@@ -29,16 +30,17 @@ namespace ui {
 
     loadHomeIconOnce();
 
-    footer_menu();
+    // footer_menu();
   }
 
   void clearLine(uint8_t row) {
     lcd.setCursor(0, row);
-    for (uint8_t i = 0; i < Cfg::LCD_ROWS; i++) {
+    for (uint8_t i = 0; i < Cfg::LCD_COLS; ++i) {
       lcd.write(' ');
     }
     lcd.setCursor(0, row);
   }
+  
   void clearSelect(uint8_t col1, uint8_t col2, uint8_t row) {
     lcd.setCursor(col1, row);
     for (uint8_t i = col1; i < col2; ++i) {
@@ -74,7 +76,7 @@ namespace ui {
   }
 
   void showValue(const char* value) {
-    clearSelect(13, 19, 1);
+    clearSelect(13, Cfg::LCD_COLS, 1);
     lcd.setCursor(13,1);
     lcd.print(value);
   } 
@@ -85,11 +87,17 @@ namespace ui {
   }
 
   void footer_value() {
-    clearLine(3); lcd.setCursor(0,3); lcd.print(F("C=CLR #=DEL *=OK D=MN"));
+    clearLine(3); lcd.setCursor(0,3); lcd.print(F("C=CLR *=DEL #=OK D="));
+    putHomeIcon(Cfg::LCD_COLS - 1, 3);
   }
 
   void footer_paywait() {
-    clearLine(3); lcd.setCursor(0,3); lcd.print(F("Scan QR or C=Cancel"));
+    clearLine(3); lcd.setCursor(0,3); lcd.print(F("Scan QR #=Done C=Ext"));
+  }
+
+  void footer_payfail() {
+    clearLine(3); lcd.setCursor(0,3); lcd.print(F("C=Cancel D="));
+    putHomeIcon(Cfg::LCD_COLS - 9, 3);
   }
 
   void showSubmitted(const char* buf) {
@@ -97,5 +105,29 @@ namespace ui {
     lcd.setCursor(0,0); lcd.print(F("Submitted:"));
     lcd.setCursor(0,1); lcd.print(buf);
   }
+
+  void showCardUID(const String& uid) {
+  clearLine(1);
+  lcd.setCursor(0, 1);
+  lcd.print(F("Card UID : "));
+  lcd.setCursor(11, 1);
+  for (uint8_t i = 0; i < uid.length() && i < Cfg::LCD_COLS; ++i) {
+    lcd.write(uid[i]);
+  }
+}
+
+
+  void showBalance(float baht) {
+  clearLine(2);
+  lcd.setCursor(0, 2);
+  lcd.print(F("Balance  : "));
+  if (isnan(baht)) {
+    lcd.print(F("---"));     // ถ้า NAN ให้ขึ้นเป็นขีด
+  } else {
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%.2f", baht);
+    lcd.print(buf);
+  }
+}
 
 } // namespace ui
