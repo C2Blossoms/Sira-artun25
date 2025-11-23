@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ขอบคุณที่ใช้บริการ</title>
+  <link rel="icon" href="https://i.postimg.cc/Xq17pCHf/icons8-credit-card-cash-withdrawal-64.png" type="image/x-icon">
+  <style>
+    body {
+      font-family: 'Prompt', 'Segoe UI', sans-serif;
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      background-color: #ffffff;
+      padding: 30px 20px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+      box-sizing: border-box;
+    }
+
+    .icon {
+      width: 64px;
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      color: #00796b;
+      font-size: 22px;
+      margin-bottom: 10px;
+    }
+
+    h3 {
+      color: #388e3c;
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+
+    p {
+      font-size: 16px;
+      color: #2e7d32;
+      font-weight: bold;
+    }
+
+    @media (max-width: 480px) {
+      h2 {
+        font-size: 18px;
+      }
+
+      h3 {
+        font-size: 16px;
+      }
+
+      p {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <img src="https://i.postimg.cc/CM77Ls07/icons8-smile-100.png" alt="icon" class="icon">
+    <h2>บัตร: {{ card_id }}</h2>
+    <h3>ยอดเงินคงเหลือ: {{ balance }} บาท</h3>
+    <p>{{ message }}</p>
+  </div>
+</body>
+</html>
